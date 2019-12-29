@@ -38,6 +38,7 @@ public class RmqConnectorConfig {
     private long refreshInterval;
     private String renamePattern;
     private String offsetSyncTopic;
+    private String consumerGroups;
 
     public RmqConnectorConfig() {
     }
@@ -64,6 +65,7 @@ public class RmqConnectorConfig {
         refreshInterval = config.getLong(ConfigDefine.REFRESH_INTERVAL, 3);
         renamePattern = config.getString(ConfigDefine.CONN_TOPIC_RENAME_FMT);
         offsetSyncTopic = config.getString(ConfigDefine.OFFSET_SYNC_TOPIC);
+        consumerGroups = config.getString(ConfigDefine.CONSUMER_GROUPS);
     }
 
     private void buildWhiteList(KeyValue config) {
@@ -126,5 +128,13 @@ public class RmqConnectorConfig {
 
     public String getOffsetSyncTopic() {
         return this.offsetSyncTopic;
+    }
+
+    public String getConsumerGroups() {
+        return consumerGroups;
+    }
+
+    public void setConsumerGroups(String consumerGroups) {
+        this.consumerGroups = consumerGroups;
     }
 }

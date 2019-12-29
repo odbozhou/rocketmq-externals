@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.replicator;
 
+import com.alibaba.fastjson.JSONObject;
 import io.openmessaging.KeyValue;
 import io.openmessaging.connector.api.Task;
 import io.openmessaging.connector.api.source.SourceConnector;
@@ -24,7 +25,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,14 +34,8 @@ import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
-import org.apache.rocketmq.common.protocol.body.ClusterInfo;
-import org.apache.rocketmq.common.protocol.body.ConsumeStatsList;
-import org.apache.rocketmq.common.protocol.body.SubscriptionGroupWrapper;
 import org.apache.rocketmq.common.subscription.SubscriptionGroupConfig;
-import org.apache.rocketmq.remoting.exception.RemotingConnectException;
 import org.apache.rocketmq.remoting.exception.RemotingException;
-import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
-import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.replicator.common.Utils;
 import org.apache.rocketmq.replicator.config.RmqConnectorConfig;
 import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
@@ -186,36 +180,34 @@ public class RmqMetaReplicator extends SourceConnector {
                 CommandUtil.fetchMasterAddrByClusterName(this.targetMQAdminExt, replicatorConfig.getTargetCluster());
 
             String addr = masters.get(0);
-            SubscriptionGroupWrapper sub = this.srcMQAdminExt.getAllSubscriptionGroup(addr, TimeUnit.SECONDS.toMillis(10));
-            for (Map.Entry<String, SubscriptionGroupConfig> entry : sub.getSubscriptionGroupTable().entrySet()) {
-                if (skipInnerGroup(entry.getKey())) {
-                    ensureSubConfig(targetBrokers, entry.getValue());
+            Set<String> consumerGroups = this.fetchConsumerGroups();
+            if (null != consumerGroups || consumerGroups.size() > 0) {
+                for (String consumerGroup : consumerGroups) {
+                    SubscriptionGroupConfig subscriptionGroupConfig = this.srcMQAdminExt.examineSubscriptionGroupConfig(addr, consumerGroup);
+                    ensureSubConfig(targetBrokers, subscriptionGroupConfig);
                 }
             }
+
         } catch (Exception e) {
             log.error("syncSubConfig failed", e);
         }
     }
 
     private void ensureSubConfig(Collection<String> targetBrokers,
-            SubscriptionGroupConfig subConfig) throws InterruptedException, RemotingException, MQClientException, MQBrokerException {
+        SubscriptionGroupConfig subConfig) throws InterruptedException, RemotingException, MQClientException, MQBrokerException {
         for (String addr : targetBrokers) {
             this.targetMQAdminExt.createAndUpdateSubscriptionGroupConfig(addr, subConfig);
         }
     }
 
-    private Set<String> fetchConsumerGroups() throws InterruptedException, RemotingTimeoutException, MQClientException, RemotingSendRequestException, RemotingConnectException, MQBrokerException {
+    private Set<String> fetchConsumerGroups() {
         return listGroups().stream().filter(this::skipInnerGroup).collect(Collectors.toSet());
     }
 
-    private Set<String> listGroups() throws InterruptedException, RemotingTimeoutException, MQClientException, RemotingSendRequestException, RemotingConnectException, MQBrokerException {
-        Set<String> groups = new HashSet<>();
-        ClusterInfo clusterInfo = this.srcMQAdminExt.examineBrokerClusterInfo();
-        String[] addrs = clusterInfo.retrieveAllAddrByCluster(this.replicatorConfig.getSrcCluster());
-        for (String addr : addrs) {
-            ConsumeStatsList stats = this.srcMQAdminExt.fetchConsumeStatsInBroker(addr, true, 3 * 1000);
-            stats.getConsumeStatsList().stream().map(Map::keySet).forEach(groups::addAll);
-        }
+    private Set<String> listGroups() {
+        String consumerGroups = this.replicatorConfig.getConsumerGroups();
+        List<String> consumerGroupList = JSONObject.parseArray(consumerGroups, String.class);
+        Set<String> groups = new HashSet<>(consumerGroupList);
         return groups;
     }
 

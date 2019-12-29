@@ -47,6 +47,8 @@ public class ConfigDefine {
 
     public static final String OFFSET_SYNC_TOPIC = "offset.sync.topic";
 
+    public static final String CONSUMER_GROUPS = "consumer.groups";
+
     /**
      * The required key for all configurations.
      */
